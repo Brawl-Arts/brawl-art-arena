@@ -14,7 +14,245 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      artwork_interactions: {
+        Row: {
+          artwork_id: string
+          created_at: string
+          id: string
+          interaction_type: string
+          user_id: string
+        }
+        Insert: {
+          artwork_id: string
+          created_at?: string
+          id?: string
+          interaction_type: string
+          user_id: string
+        }
+        Update: {
+          artwork_id?: string
+          created_at?: string
+          id?: string
+          interaction_type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artwork_interactions_artwork_id_fkey"
+            columns: ["artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      artworks: {
+        Row: {
+          attacks_count: number
+          created_at: string
+          description: string | null
+          event_id: string
+          id: string
+          image_url: string
+          likes_count: number
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attacks_count?: number
+          created_at?: string
+          description?: string | null
+          event_id: string
+          id?: string
+          image_url: string
+          likes_count?: number
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attacks_count?: number
+          created_at?: string
+          description?: string | null
+          event_id?: string
+          id?: string
+          image_url?: string
+          likes_count?: number
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artworks_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_participants: {
+        Row: {
+          event_id: string
+          id: string
+          joined_at: string
+          team: string
+          user_id: string
+        }
+        Insert: {
+          event_id: string
+          id?: string
+          joined_at?: string
+          team: string
+          user_id: string
+        }
+        Update: {
+          event_id?: string
+          id?: string
+          joined_at?: string
+          team?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_participants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string
+          description: string
+          end_time: string
+          id: string
+          midway_theme: string | null
+          midway_time: string | null
+          start_time: string
+          status: string
+          team_a_name: string
+          team_a_pfp: string | null
+          team_b_name: string
+          team_b_pfp: string | null
+          theme: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          end_time: string
+          id?: string
+          midway_theme?: string | null
+          midway_time?: string | null
+          start_time: string
+          status?: string
+          team_a_name: string
+          team_a_pfp?: string | null
+          team_b_name: string
+          team_b_pfp?: string | null
+          theme: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          end_time?: string
+          id?: string
+          midway_theme?: string | null
+          midway_time?: string | null
+          start_time?: string
+          status?: string
+          team_a_name?: string
+          team_a_pfp?: string | null
+          team_b_name?: string
+          team_b_pfp?: string | null
+          theme?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          display_name: string
+          id: string
+          updated_at: string
+          user_id: string
+          username: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name: string
+          id?: string
+          updated_at?: string
+          user_id: string
+          username: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          display_name?: string
+          id?: string
+          updated_at?: string
+          user_id?: string
+          username?: string
+        }
+        Relationships: []
+      }
+      user_points: {
+        Row: {
+          artwork_points: number
+          attack_points: number
+          created_at: string
+          event_id: string
+          id: string
+          like_points: number
+          points_total: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          artwork_points?: number
+          attack_points?: number
+          created_at?: string
+          event_id: string
+          id?: string
+          like_points?: number
+          points_total?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          artwork_points?: number
+          attack_points?: number
+          created_at?: string
+          event_id?: string
+          id?: string
+          like_points?: number
+          points_total?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_points_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
