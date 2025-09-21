@@ -10,6 +10,7 @@ import Auth from "./pages/Auth";
 import Events from "./pages/Events";
 import Gallery from "./pages/Gallery";
 import Profile from "./pages/Profile";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -72,6 +73,7 @@ function AppContent() {
             </ProtectedRoute>
           } 
         />
+        <Route path="/admin" element={<Admin />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
     </div>
