@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Calendar, Clock, Edit, Trash2, Plus } from "lucide-react";
+import { useAuth } from "@/hooks/useAuth";
 
 interface Event {
   id: string;
@@ -29,22 +30,24 @@ interface Event {
 
 export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(false);
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const { toast } = useToast();
+  const { user, signIn } = useAuth();
 
-  const ADMIN_PASSWORD = "admin123"; // In production, this would be environment variable
-
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handleAdminLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (password === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-      toast({ title: "Access granted" });
+    const { error } = await signIn(email, password);
+    
+    if (error) {
+      toast({ title: "Invalid credentials", variant: "destructive" });
     } else {
-      toast({ title: "Invalid password", variant: "destructive" });
+      setIsAuthenticated(true);
+      toast({ title: "Admin access granted" });
     }
   };
 
@@ -64,10 +67,11 @@ export default function Admin() {
   };
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (user) {
+      setIsAuthenticated(true);
       fetchEvents();
     }
-  }, [isAuthenticated]);
+  }, [user]);
 
   const createEvent = async (formData: FormData) => {
     const eventData = {
@@ -127,16 +131,26 @@ export default function Admin() {
     }
   };
 
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-background">
         <Card className="w-full max-w-md mx-4">
           <CardHeader className="text-center">
             <CardTitle className="text-2xl font-bold text-primary">Admin Access</CardTitle>
-            <CardDescription>Enter password to access admin panel</CardDescription>
+            <CardDescription>Sign in with admin credentials to access admin panel</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handlePasswordSubmit} className="space-y-4">
+            <form onSubmit={handleAdminLogin} className="space-y-4">
+              <div>
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
               <div>
                 <Label htmlFor="password">Password</Label>
                 <Input
@@ -148,7 +162,7 @@ export default function Admin() {
                 />
               </div>
               <Button type="submit" className="w-full">
-                Access Admin Panel
+                Sign In to Admin Panel
               </Button>
             </form>
           </CardContent>
