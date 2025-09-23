@@ -74,14 +74,18 @@ export default function Admin() {
   }, [user]);
 
   const createEvent = async (formData: FormData) => {
+    const startTime = formData.get('start_time') as string;
+    const endTime = formData.get('end_time') as string;
+    const midwayTime = formData.get('midway_time') as string;
+    
     const eventData = {
       title: formData.get('title') as string,
       description: formData.get('description') as string,
       theme: formData.get('theme') as string,
       midway_theme: formData.get('midway_theme') as string || null,
-      start_time: formData.get('start_time') as string,
-      end_time: formData.get('end_time') as string,
-      midway_time: formData.get('midway_time') as string || null,
+      start_time: startTime ? new Date(startTime).toISOString() : null,
+      end_time: endTime ? new Date(endTime).toISOString() : null,
+      midway_time: midwayTime ? new Date(midwayTime).toISOString() : null,
       team_a_name: formData.get('team_a_name') as string,
       team_a_pfp: formData.get('team_a_pfp') as string || null,
       team_b_name: formData.get('team_b_name') as string,
