@@ -258,7 +258,20 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      update_event_status: {
+        Args: Record<PropertyKey, never>
+        Returns: undefined
+      }
+      update_user_points: {
+        Args: {
+          p_artwork_points?: number
+          p_attack_points?: number
+          p_event_id: string
+          p_like_points?: number
+          p_user_id: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       [_ in never]: never

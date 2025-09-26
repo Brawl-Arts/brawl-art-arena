@@ -85,11 +85,16 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
       }
 
       // Update user points for artwork upload (+3 points)
-      const { error: pointsError } = await supabase.rpc('update_user_points', {
-        p_user_id: user.id,
-        p_event_id: eventId,
-        p_artwork_points: 3
-      });
+      const { error: pointsError } = await supabase
+        .from('user_points')
+        .upsert({
+          user_id: user.id,
+          event_id: eventId,
+          artwork_points: 3,
+          points_total: 3
+        }, {
+          onConflict: 'user_id,event_id'
+        });
 
       if (pointsError) {
         console.error('Error updating points:', pointsError);

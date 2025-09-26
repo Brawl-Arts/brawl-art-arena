@@ -193,29 +193,58 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
         : artwork
     ));
 
-    // Update user points
-    const pointsToAdd = type === 'like' ? 0 : 2; // +2 points for attacks
-    if (pointsToAdd > 0) {
-      const { error: pointsError } = await supabase.rpc('update_user_points', {
-        p_user_id: user.id,
-        p_event_id: eventId,
-        p_attack_points: pointsToAdd
-      });
+    // Update user points for attacks (+2 points)
+    if (type === 'attack') {
+      const { data: existingPoints } = await supabase
+        .from('user_points')
+        .select('attack_points, points_total')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .single();
+
+      const currentAttackPoints = existingPoints?.attack_points || 0;
+      const currentTotal = existingPoints?.points_total || 0;
+
+      const { error: pointsError } = await supabase
+        .from('user_points')
+        .upsert({
+          user_id: user.id,
+          event_id: eventId,
+          attack_points: currentAttackPoints + 2,
+          points_total: currentTotal + 2
+        }, {
+          onConflict: 'user_id,event_id'
+        });
 
       if (pointsError) {
-        console.error('Error updating points:', pointsError);
+        console.error('Error updating attack points:', pointsError);
       }
     }
 
-    // Update artwork owner points for receiving likes
+    // Update artwork owner points for receiving likes (+1 point)
     if (type === 'like') {
       const artwork = artworks.find(a => a.id === artworkId);
       if (artwork) {
-        const { error: likePointsError } = await supabase.rpc('update_user_points', {
-          p_user_id: artwork.user_id,
-          p_event_id: eventId,
-          p_like_points: 1
-        });
+        const { data: existingPoints } = await supabase
+          .from('user_points')
+          .select('like_points, points_total')
+          .eq('user_id', artwork.user_id)
+          .eq('event_id', eventId)
+          .single();
+
+        const currentLikePoints = existingPoints?.like_points || 0;
+        const currentTotal = existingPoints?.points_total || 0;
+
+        const { error: likePointsError } = await supabase
+          .from('user_points')
+          .upsert({
+            user_id: artwork.user_id,
+            event_id: eventId,
+            like_points: currentLikePoints + 1,
+            points_total: currentTotal + 1
+          }, {
+            onConflict: 'user_id,event_id'
+          });
 
         if (likePointsError) {
           console.error('Error updating like points:', likePointsError);

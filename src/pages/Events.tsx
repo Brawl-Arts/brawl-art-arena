@@ -3,9 +3,13 @@ import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, Clock, Users, Trophy } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Calendar, Clock, Users, Trophy, Palette, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
+import ArtworkUpload from '@/components/ArtworkUpload';
+import EventGallery from '@/components/EventGallery';
 
 interface Event {
   id: string;
@@ -133,6 +137,28 @@ export default function Events() {
     }
   };
 
+  const getCurrentTheme = (event: Event) => {
+    const now = new Date();
+    const midwayTime = event.midway_time ? new Date(event.midway_time) : null;
+    
+    if (midwayTime && now >= midwayTime && event.midway_theme) {
+      return event.midway_theme;
+    }
+    return event.theme;
+  };
+
+  const isEventOngoing = (event: Event) => {
+    const now = new Date();
+    const startTime = new Date(event.start_time);
+    const endTime = new Date(event.end_time);
+    
+    return now >= startTime && now <= endTime;
+  };
+
+  const canUploadArtwork = (event: Event) => {
+    return isEventOngoing(event) && isParticipating(event.id);
+  };
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString('en-US', {
       weekday: 'long',
@@ -172,6 +198,10 @@ export default function Events() {
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {events.map((event) => {
           const participation = isParticipating(event.id);
+          const currentTheme = getCurrentTheme(event);
+          const canUpload = canUploadArtwork(event);
+          const themeChanged = event.midway_theme && currentTheme === event.midway_theme;
+          
           return (
             <Card key={event.id} className="hover:shadow-teal transition-shadow duration-300">
               <CardHeader>
@@ -180,12 +210,19 @@ export default function Events() {
                   {getStatusBadge(event.status)}
                 </div>
                 <CardDescription>{event.description}</CardDescription>
+                
+                {themeChanged && (
+                  <div className="flex items-center gap-2 p-2 bg-teal/10 rounded-lg border border-teal/20">
+                    <AlertCircle className="h-4 w-4 text-teal" />
+                    <span className="text-sm text-teal font-medium">Theme changed!</span>
+                  </div>
+                )}
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <Trophy className="h-4 w-4" />
-                    <span>Theme: {event.theme}</span>
+                    <Palette className="h-4 w-4" />
+                    <span>Current Theme: <strong className="text-teal">{currentTheme}</strong></span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -211,11 +248,51 @@ export default function Events() {
                 </div>
 
                 {participation ? (
-                  <div className="text-center">
-                    <Badge className="bg-teal text-white">
-                      <Users className="h-3 w-3 mr-1" />
-                      Team {participation.team}
-                    </Badge>
+                  <div className="space-y-3">
+                    <div className="text-center">
+                      <Badge className="bg-teal text-white">
+                        <Users className="h-3 w-3 mr-1" />
+                        Team {participation.team}
+                      </Badge>
+                    </div>
+                    
+                    {canUpload && (
+                      <ArtworkUpload 
+                        eventId={event.id}
+                        eventTitle={event.title}
+                        currentTheme={currentTheme}
+                        onArtworkUploaded={() => {
+                          // Optionally refresh something
+                        }}
+                      />
+                    )}
+                    
+                    {event.status === 'ongoing' && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                            <Trophy className="h-4 w-4 mr-2" />
+                            View Battle Gallery
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
+                          <DialogHeader>
+                            <DialogTitle>{event.title} - Battle Gallery</DialogTitle>
+                            <DialogDescription>
+                              Current Theme: {currentTheme}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="overflow-y-auto max-h-[70vh]">
+                            <EventGallery 
+                              eventId={event.id}
+                              eventTitle={event.title}
+                              teamAName={event.team_a_name}
+                              teamBName={event.team_b_name}
+                            />
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
                   </div>
                 ) : event.status === 'upcoming' ? (
                   <Button 
@@ -225,9 +302,37 @@ export default function Events() {
                     Join Battle
                   </Button>
                 ) : (
-                  <p className="text-center text-muted-foreground text-sm">
-                    {event.status === 'ongoing' ? 'Battle in progress' : 'Battle ended'}
-                  </p>
+                  <div className="space-y-2">
+                    <p className="text-center text-muted-foreground text-sm">
+                      {event.status === 'ongoing' ? 'Battle in progress' : 'Battle ended'}
+                    </p>
+                    {event.status === 'ended' && (
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="outline" className="w-full">
+                            <Trophy className="h-4 w-4 mr-2" />
+                            View Final Results
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
+                          <DialogHeader>
+                            <DialogTitle>{event.title} - Final Results</DialogTitle>
+                            <DialogDescription>
+                              Battle completed - Final theme: {currentTheme}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <div className="overflow-y-auto max-h-[70vh]">
+                            <EventGallery 
+                              eventId={event.id}
+                              eventTitle={event.title}
+                              teamAName={event.team_a_name}
+                              teamBName={event.team_b_name}
+                            />
+                          </div>
+                        </DialogContent>
+                      </Dialog>
+                    )}
+                  </div>
                 )}
               </CardContent>
             </Card>
