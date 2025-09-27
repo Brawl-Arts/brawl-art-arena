@@ -8,46 +8,46 @@ All colors MUST be HSL.
 
 @layer base {
   :root {
-    /* Brawl Arts Teal Theme */
-    --background: 220 14% 96%;
-    --foreground: 220 9% 12%;
+    /* Brawl Arts Red Theme */
+    --background: 0 0% 100%;
+    --foreground: 210 11% 15%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 9% 12%;
+    --card-foreground: 210 11% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 9% 12%;
+    --popover-foreground: 210 11% 15%;
 
-    --primary: 174 86% 37%;  /* Teal #12b19d */
+    --primary: 1 83% 63%;  /* Primary Red #E53935 */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 91%;
-    --secondary-foreground: 220 9% 12%;
+    --secondary: 210 11% 96%;
+    --secondary-foreground: 210 11% 15%;
 
-    --muted: 220 14% 91%;
-    --muted-foreground: 220 9% 46%;
+    --muted: 210 11% 96%;
+    --muted-foreground: 210 11% 46%;
 
-    --accent: 174 86% 37%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 45 95% 58%;  /* Gold/Yellow Accent #F9A825 */
+    --accent-foreground: 210 11% 15%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 1 83% 63%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 220 13% 88%;
-    --input: 220 13% 88%;
-    --ring: 174 86% 37%;
+    --border: 210 11% 88%;
+    --input: 210 11% 88%;
+    --ring: 1 83% 63%;
 
-    /* Teal glow effects */
-    --teal-glow: 174 86% 50%;
-    --teal-soft: 174 60% 85%;
+    /* Red and gold effects */
+    --red-glow: 1 83% 70%;
+    --gold-accent: 45 95% 58%;
     
     /* Battle arena gradients */
-    --gradient-teal: linear-gradient(135deg, hsl(174 86% 37%), hsl(174 86% 50%));
-    --gradient-background: linear-gradient(180deg, hsl(220 14% 96%), hsl(220 14% 93%));
+    --gradient-primary: linear-gradient(135deg, hsl(1 83% 63%), hsl(1 83% 70%));
+    --gradient-background: linear-gradient(180deg, hsl(0 0% 100%), hsl(210 11% 98%));
     
     /* Shadows */
-    --shadow-teal: 0 10px 30px -10px hsl(174 86% 37% / 0.3);
-    --shadow-glow: 0 0 40px hsl(174 86% 50% / 0.4);
+    --shadow-red: 0 10px 30px -10px hsl(1 83% 63% / 0.3);
+    --shadow-glow: 0 0 40px hsl(1 83% 70% / 0.4);
 
     --radius: 0.5rem;
 
@@ -69,46 +69,46 @@ All colors MUST be HSL.
   }
 
   .dark {
-    /* Dark mode Brawl Arts Teal Theme */
-    --background: 220 14% 8%;
-    --foreground: 220 14% 96%;
+    /* Dark mode Brawl Arts Red Theme */
+    --background: 210 11% 15%;  /* Dark Gray #1E1E1E */
+    --foreground: 0 0% 100%;
 
-    --card: 220 14% 12%;
-    --card-foreground: 220 14% 96%;
+    --card: 210 11% 18%;  /* Slightly lighter dark gray #2C2C2C */
+    --card-foreground: 0 0% 100%;
 
-    --popover: 220 14% 12%;
-    --popover-foreground: 220 14% 96%;
+    --popover: 210 11% 18%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 174 86% 50%;  /* Brighter teal for dark mode */
-    --primary-foreground: 220 14% 8%;
+    --primary: 1 83% 70%;  /* Brighter red for dark mode */
+    --primary-foreground: 0 0% 100%;
 
-    --secondary: 220 14% 16%;
-    --secondary-foreground: 220 14% 96%;
+    --secondary: 210 11% 25%;
+    --secondary-foreground: 0 0% 100%;
 
-    --muted: 220 14% 16%;
-    --muted-foreground: 220 9% 65%;
+    --muted: 210 11% 25%;
+    --muted-foreground: 210 11% 65%;
 
-    --accent: 174 86% 50%;
-    --accent-foreground: 220 14% 8%;
+    --accent: 45 95% 65%;  /* Brighter gold for dark mode */
+    --accent-foreground: 210 11% 15%;
 
-    --destructive: 0 62% 50%;
-    --destructive-foreground: 220 14% 96%;
+    --destructive: 1 83% 70%;
+    --destructive-foreground: 0 0% 100%;
 
-    --border: 220 14% 20%;
-    --input: 220 14% 20%;
-    --ring: 174 86% 50%;
+    --border: 210 11% 30%;
+    --input: 210 11% 30%;
+    --ring: 1 83% 70%;
 
-    /* Dark mode teal effects */
-    --teal-glow: 174 86% 60%;
-    --teal-soft: 174 60% 25%;
+    /* Dark mode red and gold effects */
+    --red-glow: 1 83% 75%;
+    --gold-accent: 45 95% 65%;
     
     /* Dark mode gradients */
-    --gradient-teal: linear-gradient(135deg, hsl(174 86% 40%), hsl(174 86% 60%));
-    --gradient-background: linear-gradient(180deg, hsl(220 14% 8%), hsl(220 14% 12%));
+    --gradient-primary: linear-gradient(135deg, hsl(1 83% 63%), hsl(1 83% 75%));
+    --gradient-background: linear-gradient(180deg, hsl(210 11% 15%), hsl(210 11% 18%));
     
     /* Dark mode shadows */
-    --shadow-teal: 0 10px 30px -10px hsl(174 86% 50% / 0.4);
-    --shadow-glow: 0 0 40px hsl(174 86% 60% / 0.5);
+    --shadow-red: 0 10px 30px -10px hsl(1 83% 70% / 0.4);
+    --shadow-glow: 0 0 40px hsl(1 83% 75% / 0.5);
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;

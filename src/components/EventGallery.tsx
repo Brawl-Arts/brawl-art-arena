@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Heart, Sword, User, Trophy } from 'lucide-react';
+import FightUpload from './FightUpload';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -41,9 +42,10 @@ interface EventGalleryProps {
   eventTitle: string;
   teamAName: string;
   teamBName: string;
+  teamFilter?: 'A' | 'B';
 }
 
-export default function EventGallery({ eventId, eventTitle, teamAName, teamBName }: EventGalleryProps) {
+export default function EventGallery({ eventId, eventTitle, teamAName, teamBName, teamFilter }: EventGalleryProps) {
   const { user } = useAuth();
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
@@ -59,15 +61,30 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
   }, [eventId, user]);
 
   const fetchArtworks = async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('artworks')
       .select(`
         *,
         profiles:user_id (username, display_name),
         event_participants:event_id (team)
       `)
-      .eq('event_id', eventId)
-      .order('created_at', { ascending: false });
+      .eq('event_id', eventId);
+
+    // Apply team filter if specified
+    if (teamFilter) {
+      const { data: teamData } = await supabase
+        .from('event_participants')
+        .select('user_id')
+        .eq('event_id', eventId)
+        .eq('team', teamFilter);
+      
+      if (teamData && teamData.length > 0) {
+        const userIds = teamData.map(p => p.user_id);
+        query = query.in('user_id', userIds);
+      }
+    }
+
+    const { data, error } = await query.order('created_at', { ascending: false });
 
     if (error) {
       toast({
@@ -138,7 +155,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
     setTeamScores([teamA, teamB]);
   };
 
-  const handleInteraction = async (artworkId: string, type: 'like' | 'attack') => {
+  const handleLikeToggle = async (artworkId: string) => {
     if (!user) {
       toast({
         title: "Authentication required",
@@ -148,81 +165,100 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
       return;
     }
 
-    // Check if already interacted
-    const existingInteraction = interactions.find(
-      i => i.artwork_id === artworkId && i.interaction_type === type
+    // Check if already liked
+    const existingLike = interactions.find(
+      i => i.artwork_id === artworkId && i.interaction_type === 'like'
     );
 
-    if (existingInteraction) {
-      toast({
-        title: "Already interacted",
-        description: `You've already ${type === 'like' ? 'liked' : 'attacked'} this artwork`,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const { error } = await supabase
-      .from('artwork_interactions')
-      .insert({
-        artwork_id: artworkId,
-        user_id: user.id,
-        interaction_type: type,
-      });
-
-    if (error) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Update local state
-    setInteractions(prev => [...prev, { artwork_id: artworkId, interaction_type: type }]);
-    
-    // Update artwork counts
-    setArtworks(prev => prev.map(artwork => 
-      artwork.id === artworkId 
-        ? {
-            ...artwork,
-            [type === 'like' ? 'likes_count' : 'attacks_count']: 
-              artwork[type === 'like' ? 'likes_count' : 'attacks_count'] + 1
-          }
-        : artwork
-    ));
-
-    // Update user points for attacks (+2 points)
-    if (type === 'attack') {
-      const { data: existingPoints } = await supabase
-        .from('user_points')
-        .select('attack_points, points_total')
+    if (existingLike) {
+      // Unlike - remove the interaction
+      const { error } = await supabase
+        .from('artwork_interactions')
+        .delete()
+        .eq('artwork_id', artworkId)
         .eq('user_id', user.id)
-        .eq('event_id', eventId)
-        .single();
+        .eq('interaction_type', 'like');
 
-      const currentAttackPoints = existingPoints?.attack_points || 0;
-      const currentTotal = existingPoints?.points_total || 0;
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const { error: pointsError } = await supabase
-        .from('user_points')
-        .upsert({
+      // Update local state
+      setInteractions(prev => prev.filter(i => !(i.artwork_id === artworkId && i.interaction_type === 'like')));
+      
+      // Update artwork counts
+      setArtworks(prev => prev.map(artwork => 
+        artwork.id === artworkId 
+          ? { ...artwork, likes_count: Math.max(0, artwork.likes_count - 1) }
+          : artwork
+      ));
+
+      // Remove like points from artwork owner
+      const artwork = artworks.find(a => a.id === artworkId);
+      if (artwork) {
+        const { data: existingPoints } = await supabase
+          .from('user_points')
+          .select('like_points, points_total')
+          .eq('user_id', artwork.user_id)
+          .eq('event_id', eventId)
+          .single();
+
+        if (existingPoints) {
+          const { error: pointsError } = await supabase
+            .from('user_points')
+            .update({
+              like_points: Math.max(0, existingPoints.like_points - 1),
+              points_total: Math.max(0, existingPoints.points_total - 1)
+            })
+            .eq('user_id', artwork.user_id)
+            .eq('event_id', eventId);
+
+          if (pointsError) {
+            console.error('Error updating like points:', pointsError);
+          }
+        }
+      }
+
+      toast({
+        title: "Unliked",
+        description: "You unliked this artwork",
+      });
+
+    } else {
+      // Like - add the interaction
+      const { error } = await supabase
+        .from('artwork_interactions')
+        .insert({
+          artwork_id: artworkId,
           user_id: user.id,
-          event_id: eventId,
-          attack_points: currentAttackPoints + 2,
-          points_total: currentTotal + 2
-        }, {
-          onConflict: 'user_id,event_id'
+          interaction_type: 'like',
         });
 
-      if (pointsError) {
-        console.error('Error updating attack points:', pointsError);
+      if (error) {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
       }
-    }
 
-    // Update artwork owner points for receiving likes (+1 point)
-    if (type === 'like') {
+      // Update local state
+      setInteractions(prev => [...prev, { artwork_id: artworkId, interaction_type: 'like' }]);
+      
+      // Update artwork counts
+      setArtworks(prev => prev.map(artwork => 
+        artwork.id === artworkId 
+          ? { ...artwork, likes_count: artwork.likes_count + 1 }
+          : artwork
+      ));
+
+      // Add like points to artwork owner (+1 point)
       const artwork = artworks.find(a => a.id === artworkId);
       if (artwork) {
         const { data: existingPoints } = await supabase
@@ -250,12 +286,12 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
           console.error('Error updating like points:', likePointsError);
         }
       }
-    }
 
-    toast({
-      title: "Success!",
-      description: `You ${type === 'like' ? 'liked' : 'attacked'} this artwork${type === 'attack' ? ' (+2 points)' : ''}`,
-    });
+      toast({
+        title: "Liked!",
+        description: "You liked this artwork (+1 point to artist)",
+      });
+    }
 
     // Refresh team scores
     fetchTeamScores();
@@ -270,8 +306,8 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
       const team = artwork.event_participants[0].team;
       return (
         <Badge 
-          variant={team === 'A' ? 'secondary' : 'outline'}
-          className={team === 'A' ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}
+          variant={team === 'A' ? 'default' : 'secondary'}
+          className={team === 'A' ? 'bg-primary text-primary-foreground' : 'bg-accent text-accent-foreground'}
         >
           Team {team}
         </Badge>
@@ -296,25 +332,25 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
       {/* Team Scores */}
       <div className="grid grid-cols-2 gap-4">
         {teamScores.map((team) => (
-          <Card key={team.team} className={`border-2 ${team === winningTeam ? 'border-teal border-solid shadow-teal' : ''}`}>
-            <CardContent className="p-4 text-center">
-              <div className="flex items-center justify-center gap-2 mb-2">
-                {team === winningTeam && <Trophy className="h-5 w-5 text-teal" />}
-                <h3 className="font-semibold">
-                  {team.team === 'A' ? teamAName : teamBName}
-                </h3>
-              </div>
-              <p className="text-2xl font-bold text-teal">{team.totalPoints} pts</p>
-              <p className="text-sm text-muted-foreground">{team.memberCount} members</p>
-            </CardContent>
-          </Card>
+                <Card key={team.team} className={`border-2 ${team === winningTeam ? 'border-primary border-solid shadow-red' : ''}`}>
+                  <CardContent className="p-4 text-center">
+                    <div className="flex items-center justify-center gap-2 mb-2">
+                      {team === winningTeam && <Trophy className="h-5 w-5 text-gold" />}
+                      <h3 className="font-semibold">
+                        {team.team === 'A' ? teamAName : teamBName}
+                      </h3>
+                    </div>
+                    <p className="text-2xl font-bold text-primary">{team.totalPoints} pts</p>
+                    <p className="text-sm text-muted-foreground">{team.memberCount} members</p>
+                  </CardContent>
+                </Card>
         ))}
       </div>
 
       {/* Artworks Grid */}
       <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
         {artworks.map((artwork) => (
-          <Card key={artwork.id} className="overflow-hidden hover:shadow-teal transition-shadow duration-300">
+          <Card key={artwork.id} className="overflow-hidden hover:shadow-red transition-shadow duration-300">
             <div className="aspect-square relative">
               <img
                 src={artwork.image_url}
@@ -344,8 +380,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleInteraction(artwork.id, 'like')}
-                      disabled={hasInteracted(artwork.id, 'like')}
+                      onClick={() => handleLikeToggle(artwork.id)}
                       className="flex items-center gap-1 hover:text-red-500"
                     >
                       <Heart 
@@ -354,18 +389,11 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
                       <span>{artwork.likes_count}</span>
                     </Button>
 
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleInteraction(artwork.id, 'attack')}
-                      disabled={hasInteracted(artwork.id, 'attack')}
-                      className="flex items-center gap-1 hover:text-orange-500"
-                    >
-                      <Sword 
-                        className={`h-4 w-4 ${hasInteracted(artwork.id, 'attack') ? 'fill-orange-500 text-orange-500' : ''}`} 
-                      />
-                      <span>{artwork.attacks_count}</span>
-                    </Button>
+                    <FightUpload
+                      targetArtworkId={artwork.id}
+                      targetArtworkTitle={artwork.title}
+                      onFightUploaded={fetchArtworks}
+                    />
                   </div>
 
                   <div className="text-xs text-muted-foreground">

@@ -179,6 +179,41 @@ export type Database = {
         }
         Relationships: []
       }
+      fight_artworks: {
+        Row: {
+          attacker_id: string
+          created_at: string
+          id: string
+          image_url: string
+          target_artwork_id: string
+          title: string
+        }
+        Insert: {
+          attacker_id: string
+          created_at?: string
+          id?: string
+          image_url: string
+          target_artwork_id: string
+          title: string
+        }
+        Update: {
+          attacker_id?: string
+          created_at?: string
+          id?: string
+          image_url?: string
+          target_artwork_id?: string
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "fight_artworks_target_artwork_id_fkey"
+            columns: ["target_artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

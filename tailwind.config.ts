@@ -48,10 +48,13 @@ export default {
           foreground: "hsl(var(--card-foreground))",
         },
         // Brawl Arts theme colors
-        teal: {
+        red: {
           DEFAULT: "hsl(var(--primary))",
-          glow: "hsl(var(--teal-glow))",
-          soft: "hsl(var(--teal-soft))",
+          glow: "hsl(var(--red-glow))",
+        },
+        gold: {
+          DEFAULT: "hsl(var(--accent))",
+          accent: "hsl(var(--gold-accent))",
         },
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
@@ -70,11 +73,11 @@ export default {
         sm: "calc(var(--radius) - 4px)",
       },
       backgroundImage: {
-        'gradient-teal': 'var(--gradient-teal)',
+        'gradient-primary': 'var(--gradient-primary)',
         'gradient-background': 'var(--gradient-background)',
       },
       boxShadow: {
-        'teal': 'var(--shadow-teal)',
+        'red': 'var(--shadow-red)',
         'glow': 'var(--shadow-glow)',
       },
       keyframes: {

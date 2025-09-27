@@ -12,6 +12,7 @@ import Gallery from "./pages/Gallery";
 import Profile from "./pages/Profile";
 import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
+import EventDetail from "./components/EventDetail";
 
 const queryClient = new QueryClient();
 
@@ -54,6 +55,14 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <Events />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
+          path="/events/:eventId" 
+          element={
+            <ProtectedRoute>
+              <EventDetail />
             </ProtectedRoute>
           } 
         />

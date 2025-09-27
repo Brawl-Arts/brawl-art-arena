@@ -1,15 +1,12 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Calendar, Clock, Users, Trophy, Palette, AlertCircle } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
-import ArtworkUpload from '@/components/ArtworkUpload';
-import EventGallery from '@/components/EventGallery';
 
 interface Event {
   id: string;
@@ -34,6 +31,7 @@ interface Participation {
 
 export default function Events() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [events, setEvents] = useState<Event[]>([]);
   const [participations, setParticipations] = useState<Participation[]>([]);
   const [loading, setLoading] = useState(true);
@@ -129,7 +127,7 @@ export default function Events() {
       case 'upcoming':
         return <Badge variant="secondary">Upcoming</Badge>;
       case 'ongoing':
-        return <Badge className="bg-teal text-white">Ongoing</Badge>;
+        return <Badge className="bg-primary text-primary-foreground">Ongoing</Badge>;
       case 'ended':
         return <Badge variant="outline">Ended</Badge>;
       default:
@@ -187,7 +185,7 @@ export default function Events() {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold bg-gradient-teal bg-clip-text text-transparent mb-2">
+        <h1 className="text-3xl font-bold bg-gradient-primary bg-clip-text text-transparent mb-2">
           Battle Events
         </h1>
         <p className="text-muted-foreground">
@@ -203,7 +201,7 @@ export default function Events() {
           const themeChanged = event.midway_theme && currentTheme === event.midway_theme;
           
           return (
-            <Card key={event.id} className="hover:shadow-teal transition-shadow duration-300">
+            <Card key={event.id} className="hover:shadow-red transition-shadow duration-300 cursor-pointer" onClick={() => navigate(`/events/${event.id}`)}>
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">{event.title}</CardTitle>
@@ -212,9 +210,9 @@ export default function Events() {
                 <CardDescription>{event.description}</CardDescription>
                 
                 {themeChanged && (
-                  <div className="flex items-center gap-2 p-2 bg-teal/10 rounded-lg border border-teal/20">
-                    <AlertCircle className="h-4 w-4 text-teal" />
-                    <span className="text-sm text-teal font-medium">Theme changed!</span>
+                  <div className="flex items-center gap-2 p-2 bg-accent/10 rounded-lg border border-accent/20">
+                    <AlertCircle className="h-4 w-4 text-accent" />
+                    <span className="text-sm text-accent font-medium">Theme changed!</span>
                   </div>
                 )}
               </CardHeader>
@@ -222,7 +220,7 @@ export default function Events() {
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
                     <Palette className="h-4 w-4" />
-                    <span>Current Theme: <strong className="text-teal">{currentTheme}</strong></span>
+                    <span>Current Theme: <strong className="text-primary">{currentTheme}</strong></span>
                   </div>
                   
                   <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -250,89 +248,46 @@ export default function Events() {
                 {participation ? (
                   <div className="space-y-3">
                     <div className="text-center">
-                      <Badge className="bg-teal text-white">
+                      <Badge className="bg-primary text-primary-foreground">
                         <Users className="h-3 w-3 mr-1" />
                         Team {participation.team}
                       </Badge>
                     </div>
                     
-                    {canUpload && (
-                      <ArtworkUpload 
-                        eventId={event.id}
-                        eventTitle={event.title}
-                        currentTheme={currentTheme}
-                        onArtworkUploaded={() => {
-                          // Optionally refresh something
-                        }}
-                      />
-                    )}
-                    
-                    {event.status === 'ongoing' && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full">
-                            <Trophy className="h-4 w-4 mr-2" />
-                            View Battle Gallery
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
-                          <DialogHeader>
-                            <DialogTitle>{event.title} - Battle Gallery</DialogTitle>
-                            <DialogDescription>
-                              Current Theme: {currentTheme}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="overflow-y-auto max-h-[70vh]">
-                            <EventGallery 
-                              eventId={event.id}
-                              eventTitle={event.title}
-                              teamAName={event.team_a_name}
-                              teamBName={event.team_b_name}
-                            />
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    )}
+                    <Button 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/events/${event.id}`);
+                      }}
+                    >
+                      <Trophy className="h-4 w-4 mr-2" />
+                      View Event Details
+                    </Button>
                   </div>
                 ) : event.status === 'upcoming' ? (
                   <Button 
-                    onClick={() => joinEvent(event.id)}
-                    className="w-full shadow-glow hover:shadow-teal transition-all duration-300"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      joinEvent(event.id);
+                    }}
+                    className="w-full shadow-glow hover:shadow-red transition-all duration-300"
                   >
                     Join Battle
                   </Button>
                 ) : (
-                  <div className="space-y-2">
-                    <p className="text-center text-muted-foreground text-sm">
-                      {event.status === 'ongoing' ? 'Battle in progress' : 'Battle ended'}
-                    </p>
-                    {event.status === 'ended' && (
-                      <Dialog>
-                        <DialogTrigger asChild>
-                          <Button variant="outline" className="w-full">
-                            <Trophy className="h-4 w-4 mr-2" />
-                            View Final Results
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden">
-                          <DialogHeader>
-                            <DialogTitle>{event.title} - Final Results</DialogTitle>
-                            <DialogDescription>
-                              Battle completed - Final theme: {currentTheme}
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="overflow-y-auto max-h-[70vh]">
-                            <EventGallery 
-                              eventId={event.id}
-                              eventTitle={event.title}
-                              teamAName={event.team_a_name}
-                              teamBName={event.team_b_name}
-                            />
-                          </div>
-                        </DialogContent>
-                      </Dialog>
-                    )}
-                  </div>
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/events/${event.id}`);
+                    }}
+                  >
+                    <Trophy className="h-4 w-4 mr-2" />
+                    View Event Details
+                  </Button>
                 )}
               </CardContent>
             </Card>

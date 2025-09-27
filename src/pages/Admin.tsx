@@ -121,16 +121,20 @@ export default function Admin() {
     }
   };
 
-  const closeEvent = async (eventId: string) => {
+  const deleteEvent = async (eventId: string) => {
+    if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+      return;
+    }
+
     const { error } = await supabase
       .from('events')
-      .update({ status: 'completed' })
+      .delete()
       .eq('id', eventId);
     
     if (error) {
-      toast({ title: "Error closing event", variant: "destructive" });
+      toast({ title: "Error deleting event", variant: "destructive" });
     } else {
-      toast({ title: "Event closed successfully" });
+      toast({ title: "Event deleted successfully" });
       fetchEvents();
     }
   };
@@ -310,15 +314,13 @@ export default function Admin() {
                           </DialogContent>
                         </Dialog>
                       )}
-                      {event.status !== 'completed' && (
-                        <Button 
-                          variant="destructive" 
-                          size="sm"
-                          onClick={() => closeEvent(event.id)}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      )}
+                      <Button 
+                        variant="destructive" 
+                        size="sm"
+                        onClick={() => deleteEvent(event.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
                     </div>
                   </div>
                 </CardHeader>
