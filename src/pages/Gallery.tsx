@@ -40,6 +40,28 @@ export default function Gallery() {
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [loading, setLoading] = useState(true);
 
+  const fetchInteractions = async () => {
+    if (!user) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('artwork_interactions')
+        .select('artwork_id, interaction_type')
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      
+      setInteractions((data || []) as Interaction[]);
+    } catch (error) {
+      console.error('Error fetching interactions:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load interactions',
+        variant: 'destructive',
+      });
+    }
+  };
+
   useEffect(() => {
     fetchArtworks();
     if (user) {
@@ -48,40 +70,68 @@ export default function Gallery() {
   }, [user]);
 
   const fetchArtworks = async () => {
-    const { data, error } = await supabase
-      .from('artworks')
-      .select(`
-        *,
-        profiles:user_id (username, display_name),
-        events:event_id (title),
-        event_participants:event_id (team)
-      `)
-      .order('created_at', { ascending: false });
+    try {
+      setLoading(true);
+      
+      // First, fetch the artworks with user details only
+      const { data: artworksData, error: artworksError } = await supabase
+        .from('artworks')
+        .select(`
+          id,
+          title,
+          description,
+          image_url,
+          likes_count,
+          attacks_count,
+          created_at,
+          user_id,
+          event_id,
+          profiles:user_id (username, display_name)
+        `)
+        .order('created_at', { ascending: false });
 
-    if (error) {
+      if (artworksError) throw artworksError;
+
+      // If no artworks found, set empty array and return
+      if (!artworksData || artworksData.length === 0) {
+        setArtworks([]);
+        setLoading(false);
+        return;
+      }
+
+      // Get unique event IDs to fetch event details
+      const eventIds = [...new Set(artworksData.map(artwork => artwork.event_id))];
+      
+      // Fetch events in a single query
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('events')
+        .select('id, title')
+        .in('id', eventIds);
+
+      if (eventsError) throw eventsError;
+
+      // Create a map of event_id to event data
+      const eventsMap = new Map(eventsData?.map(event => [event.id, event]) || []);
+
+      // Map artworks with their events
+      const artworksWithEvents = artworksData.map(artwork => ({
+        ...artwork,
+        events: eventsMap.get(artwork.event_id) || null,
+        // Initialize empty participants array, we'll handle this separately
+        event_participants: []
+      }));
+
+      setArtworks(artworksWithEvents as unknown as Artwork[]);
+    } catch (err) {
+      const error = err as Error;
+      console.error('Error in fetchArtworks:', error);
       toast({
         title: "Error fetching artworks",
-        description: error.message,
+        description: error.message || 'An unknown error occurred',
         variant: "destructive",
       });
-    } else {
-      setArtworks((data || []) as unknown as Artwork[]);
-    }
-    setLoading(false);
-  };
-
-  const fetchInteractions = async () => {
-    if (!user) return;
-
-    const { data, error } = await supabase
-      .from('artwork_interactions')
-      .select('artwork_id, interaction_type')
-      .eq('user_id', user.id);
-
-    if (error) {
-      console.error('Error fetching interactions:', error);
-    } else {
-      setInteractions((data || []) as Interaction[]);
+    } finally {
+      setLoading(false);
     }
   };
 

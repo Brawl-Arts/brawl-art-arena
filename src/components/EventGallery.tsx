@@ -3,8 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, Sword, User, Trophy } from 'lucide-react';
-import FightUpload from './FightUpload';
+import { Heart, User, Trophy, Upload } from 'lucide-react';
+import ArtworkUpload from './ArtworkUpload';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -54,62 +54,94 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
 
   useEffect(() => {
     fetchArtworks();
-    fetchTeamScores();
     if (user) {
       fetchInteractions();
     }
   }, [eventId, user]);
 
   const fetchArtworks = async () => {
-    let query = supabase
-      .from('artworks')
-      .select(`
-        *,
-        profiles:user_id (username, display_name),
-        event_participants:event_id (team)
-      `)
-      .eq('event_id', eventId);
-
-    // Apply team filter if specified
-    if (teamFilter) {
-      const { data: teamData } = await supabase
-        .from('event_participants')
-        .select('user_id')
+    setLoading(true);
+    try {
+      // First, fetch the artworks with user details
+      const { data: artworksData, error: artworksError } = await supabase
+        .from('artworks')
+        .select(`
+          *,
+          profiles:user_id (username, display_name)
+        `)
         .eq('event_id', eventId)
-        .eq('team', teamFilter);
-      
-      if (teamData && teamData.length > 0) {
-        const userIds = teamData.map(p => p.user_id);
-        query = query.in('user_id', userIds);
+        .order('created_at', { ascending: false });
+
+      if (artworksError) throw artworksError;
+
+      if (!artworksData || artworksData.length === 0) {
+        setArtworks([]);
+        setLoading(false);
+        return;
       }
-    }
 
-    const { data, error } = await query.order('created_at', { ascending: false });
+      // Get all user IDs to fetch their team information
+      const userIds = artworksData.map(artwork => artwork.user_id);
+      
+      // Fetch team information for all users in one query
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('event_participants')
+        .select('user_id, team')
+        .eq('event_id', eventId)
+        .in('user_id', userIds);
 
-    if (error) {
+      if (participantsError) throw participantsError;
+
+      // Create a map of user_id to team
+      const userTeamMap = new Map();
+      participantsData?.forEach(participant => {
+        userTeamMap.set(participant.user_id, participant.team);
+      });
+
+      // Combine the data
+      const artworksWithTeams = artworksData.map(artwork => ({
+        ...artwork,
+        event_participants: userTeamMap.has(artwork.user_id) 
+          ? [{ team: userTeamMap.get(artwork.user_id) }] 
+          : null
+      }));
+
+      // Apply team filter if specified
+      const filteredArtworks = teamFilter
+        ? artworksWithTeams.filter(artwork => 
+            artwork.event_participants?.some(p => p.team === teamFilter)
+          )
+        : artworksWithTeams;
+
+      setArtworks(filteredArtworks as unknown as Artwork[]);
+    } catch (error) {
+      console.error('Error fetching artworks:', error);
       toast({
         title: "Error fetching artworks",
-        description: error.message,
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
         variant: "destructive",
       });
-    } else {
-      setArtworks((data || []) as unknown as Artwork[]);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const fetchInteractions = async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from('artwork_interactions')
-      .select('artwork_id, interaction_type')
-      .eq('user_id', user.id);
+    try {
+      const { data, error } = await supabase
+        .from('artwork_interactions')
+        .select('artwork_id, interaction_type')
+        .eq('user_id', user.id);
 
-    if (error) {
-      console.error('Error fetching interactions:', error);
-    } else {
-      setInteractions((data || []) as Interaction[]);
+      if (error) {
+        console.error('Error fetching interactions:', error);
+      } else {
+        setInteractions((data || []) as Interaction[]);
+      }
+    } catch (error) {
+      console.error('Unexpected error in fetchInteractions:', error);
     }
   };
 
@@ -155,146 +187,199 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
     setTeamScores([teamA, teamB]);
   };
 
+  const handleUploadSuccess = async (newArtwork: Artwork) => {
+    if (!user) {
+      toast({
+        title: 'Authentication required',
+        description: 'Please sign in to upload artwork',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    try {
+      // Add 3 points to the user's score for uploading artwork
+      const { data: currentPoints, error: fetchError } = await supabase
+        .from('user_points')
+        .select('artwork_points, points_total')
+        .eq('user_id', user.id)
+        .eq('event_id', eventId)
+        .single();
+
+      // Handle the case where the user doesn't have points record yet
+      const currentArtworkPoints = currentPoints?.artwork_points || 0;
+      const currentTotalPoints = currentPoints?.points_total || 0;
+
+      // Update user points with the new artwork points
+      const { error: updateError } = await supabase
+        .from('user_points')
+        .upsert({
+          user_id: user.id,
+          event_id: eventId,
+          artwork_points: currentArtworkPoints + 3, // 3 points for uploading artwork
+          points_total: currentTotalPoints + 3,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id,event_id'
+        });
+
+      if (updateError) throw updateError;
+
+      // Add the new artwork to the local state
+      setArtworks(prev => [newArtwork, ...prev] as Artwork[]);
+      
+      // Refresh team scores to reflect the new points
+      await fetchTeamScores();
+      
+      // Show success message
+      toast({
+        title: 'Artwork uploaded!',
+        description: 'Your artwork has been submitted successfully. +3 points awarded!',
+      });
+    } catch (error) {
+      console.error('Error handling upload success:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update points. Your artwork was uploaded, but points may not have been awarded.',
+        variant: 'destructive',
+      });
+    }
+  };
+
   const handleLikeToggle = async (artworkId: string) => {
     if (!user) {
       toast({
         title: "Authentication required",
-        description: "Please sign in to interact with artworks",
+        description: "Please sign in to like artworks",
         variant: "destructive",
       });
       return;
     }
 
-    // Check if already liked
-    const existingLike = interactions.find(
-      i => i.artwork_id === artworkId && i.interaction_type === 'like'
-    );
+    try {
+      // Check if already liked
+      const existingLike = interactions.find(
+        i => i.artwork_id === artworkId && i.interaction_type === 'like'
+      );
 
-    if (existingLike) {
-      // Unlike - remove the interaction
-      const { error } = await supabase
-        .from('artwork_interactions')
-        .delete()
-        .eq('artwork_id', artworkId)
-        .eq('user_id', user.id)
-        .eq('interaction_type', 'like');
+      if (existingLike) {
+        // Unlike - remove the interaction
+        const { error } = await supabase
+          .from('artwork_interactions')
+          .delete()
+          .eq('artwork_id', artworkId)
+          .eq('user_id', user.id)
+          .eq('interaction_type', 'like');
 
-      if (error) {
-        toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
-        });
-        return;
-      }
+        if (error) throw error;
 
-      // Update local state
-      setInteractions(prev => prev.filter(i => !(i.artwork_id === artworkId && i.interaction_type === 'like')));
-      
-      // Update artwork counts
-      setArtworks(prev => prev.map(artwork => 
-        artwork.id === artworkId 
-          ? { ...artwork, likes_count: Math.max(0, artwork.likes_count - 1) }
-          : artwork
-      ));
+        // Update local state
+        setInteractions(prev => prev.filter(i => !(i.artwork_id === artworkId && i.interaction_type === 'like')));
+        
+        // Update artwork counts
+        setArtworks(prev => prev.map(artwork => 
+          artwork.id === artworkId 
+            ? { ...artwork, likes_count: Math.max(0, artwork.likes_count - 1) }
+            : artwork
+        ));
 
-      // Remove like points from artwork owner
-      const artwork = artworks.find(a => a.id === artworkId);
-      if (artwork) {
-        const { data: existingPoints } = await supabase
-          .from('user_points')
-          .select('like_points, points_total')
-          .eq('user_id', artwork.user_id)
-          .eq('event_id', eventId)
-          .single();
-
-        if (existingPoints) {
-          const { error: pointsError } = await supabase
+        // Remove like points from artwork owner
+        const artwork = artworks.find(a => a.id === artworkId);
+        if (artwork) {
+          const { data: existingPoints } = await supabase
             .from('user_points')
-            .update({
-              like_points: Math.max(0, existingPoints.like_points - 1),
-              points_total: Math.max(0, existingPoints.points_total - 1)
-            })
+            .select('like_points, points_total')
             .eq('user_id', artwork.user_id)
-            .eq('event_id', eventId);
+            .eq('event_id', eventId)
+            .single();
 
-          if (pointsError) {
-            console.error('Error updating like points:', pointsError);
+          if (existingPoints) {
+            const { error: pointsError } = await supabase
+              .from('user_points')
+              .update({
+                like_points: Math.max(0, existingPoints.like_points - 1),
+                points_total: Math.max(0, existingPoints.points_total - 1)
+              })
+              .eq('user_id', artwork.user_id)
+              .eq('event_id', eventId);
+
+            if (pointsError) {
+              console.error('Error updating like points:', pointsError);
+            }
           }
         }
-      }
 
-      toast({
-        title: "Unliked",
-        description: "You unliked this artwork",
-      });
-
-    } else {
-      // Like - add the interaction
-      const { error } = await supabase
-        .from('artwork_interactions')
-        .insert({
-          artwork_id: artworkId,
-          user_id: user.id,
-          interaction_type: 'like',
-        });
-
-      if (error) {
         toast({
-          title: "Error",
-          description: error.message,
-          variant: "destructive",
+          title: "Unliked",
+          description: "You unliked this artwork",
         });
-        return;
-      }
-
-      // Update local state
-      setInteractions(prev => [...prev, { artwork_id: artworkId, interaction_type: 'like' }]);
-      
-      // Update artwork counts
-      setArtworks(prev => prev.map(artwork => 
-        artwork.id === artworkId 
-          ? { ...artwork, likes_count: artwork.likes_count + 1 }
-          : artwork
-      ));
-
-      // Add like points to artwork owner (+1 point)
-      const artwork = artworks.find(a => a.id === artworkId);
-      if (artwork) {
-        const { data: existingPoints } = await supabase
-          .from('user_points')
-          .select('like_points, points_total')
-          .eq('user_id', artwork.user_id)
-          .eq('event_id', eventId)
-          .single();
-
-        const currentLikePoints = existingPoints?.like_points || 0;
-        const currentTotal = existingPoints?.points_total || 0;
-
-        const { error: likePointsError } = await supabase
-          .from('user_points')
-          .upsert({
-            user_id: artwork.user_id,
-            event_id: eventId,
-            like_points: currentLikePoints + 1,
-            points_total: currentTotal + 1
-          }, {
-            onConflict: 'user_id,event_id'
+      } else {
+        // Like - add the interaction
+        const { error } = await supabase
+          .from('artwork_interactions')
+          .insert({
+            artwork_id: artworkId,
+            user_id: user.id,
+            interaction_type: 'like',
           });
 
-        if (likePointsError) {
-          console.error('Error updating like points:', likePointsError);
+        if (error) throw error;
+
+        // Update local state
+        setInteractions(prev => [...prev, { artwork_id: artworkId, interaction_type: 'like' }]);
+        
+        // Update artwork counts
+        setArtworks(prev => prev.map(artwork => 
+          artwork.id === artworkId 
+            ? { ...artwork, likes_count: artwork.likes_count + 1 }
+            : artwork
+        ));
+
+        // Add like points to artwork owner (+1 point)
+        const artwork = artworks.find(a => a.id === artworkId);
+        if (artwork) {
+          const { data: existingPoints } = await supabase
+            .from('user_points')
+            .select('like_points, points_total')
+            .eq('user_id', artwork.user_id)
+            .eq('event_id', eventId)
+            .single();
+
+          const currentLikePoints = existingPoints?.like_points || 0;
+          const currentTotal = existingPoints?.points_total || 0;
+
+          const { error: likePointsError } = await supabase
+            .from('user_points')
+            .upsert({
+              user_id: artwork.user_id,
+              event_id: eventId,
+              like_points: currentLikePoints + 1,
+              points_total: currentTotal + 1
+            }, {
+              onConflict: 'user_id,event_id'
+            });
+
+          if (likePointsError) {
+            console.error('Error updating like points:', likePointsError);
+          }
         }
+
+        toast({
+          title: "Liked!",
+          description: "You liked this artwork (+1 point to artist)",
+        });
       }
 
+      // Refresh team scores
+      await fetchTeamScores();
+    } catch (error) {
+      console.error('Error toggling like:', error);
       toast({
-        title: "Liked!",
-        description: "You liked this artwork (+1 point to artist)",
+        title: 'Error',
+        description: 'Failed to update like status. Please try again.',
+        variant: 'destructive',
       });
     }
-
-    // Refresh team scores
-    fetchTeamScores();
   };
 
   const hasInteracted = (artworkId: string, type: 'like' | 'attack') => {
@@ -303,7 +388,9 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
 
   const getTeamBadge = (artwork: Artwork) => {
     if (artwork.event_participants && artwork.event_participants.length > 0) {
-      const team = artwork.event_participants[0].team;
+      const team = artwork.event_participants[0]?.team;
+      if (!team) return null;
+      
       return (
         <Badge 
           variant={team === 'A' ? 'default' : 'secondary'}
@@ -329,8 +416,17 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
 
   return (
     <div className="space-y-6">
-      {/* Team Scores */}
-      <div className="grid grid-cols-2 gap-4">
+      {/* Event Title */}
+      <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 pb-4 pt-2 border-b">
+        <div className="container mx-auto px-4">
+          <h2 className="text-2xl font-bold">{eventTitle}</h2>
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-4">
+        {/* Team Scores */}
+        <div className="grid grid-cols-2 gap-4 my-6">
         {teamScores.map((team) => (
                 <Card key={team.team} className={`border-2 ${team === winningTeam ? 'border-primary border-solid shadow-red' : ''}`}>
                   <CardContent className="p-4 text-center">
@@ -389,11 +485,6 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
                       <span>{artwork.likes_count}</span>
                     </Button>
 
-                    <FightUpload
-                      targetArtworkId={artwork.id}
-                      targetArtworkTitle={artwork.title}
-                      onFightUploaded={fetchArtworks}
-                    />
                   </div>
 
                   <div className="text-xs text-muted-foreground">
@@ -414,6 +505,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
           </p>
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ArrowLeft, Users, Trophy, Calendar, Clock } from 'lucide-react';
+import { ArrowLeft, Users, Trophy, Calendar, Clock, Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 import EventGallery from './EventGallery';
@@ -46,62 +46,8 @@ export default function EventDetail() {
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
 
-  useEffect(() => {
-    if (eventId) {
-      fetchEvent();
-      fetchParticipants();
-    }
-  }, [eventId]);
-
-  const fetchEvent = async () => {
-    if (!eventId) return;
-
-    const { data, error } = await supabase
-      .from('events')
-      .select('*')
-      .eq('id', eventId)
-      .single();
-
-    if (error) {
-      toast({
-        title: "Error fetching event",
-        description: error.message,
-        variant: "destructive",
-      });
-      navigate('/events');
-    } else {
-      setEvent(data);
-    }
-    setLoading(false);
-  };
-
-  const fetchParticipants = async () => {
-    if (!eventId) return;
-
-    const { data, error } = await supabase
-      .from('event_participants')
-      .select(`
-        user_id,
-        team,
-        profiles:user_id (display_name, username)
-      `)
-      .eq('event_id', eventId);
-
-    if (error) {
-      console.error('Error fetching participants:', error);
-    } else {
-      setParticipants((data || []) as unknown as Participant[]);
-      
-      // Check if current user is already participating
-      if (user) {
-        const userParticipant = data?.find(p => p.user_id === user.id);
-        setUserParticipation(userParticipant?.team as 'A' | 'B' || null);
-      }
-    }
-  };
-
   const joinEvent = async () => {
-    if (!user || !eventId || !event) {
+    if (!user) {
       toast({
         title: "Cannot join event",
         description: "Please sign in to join the event",
@@ -109,6 +55,8 @@ export default function EventDetail() {
       });
       return;
     }
+
+    if (!event) return;
 
     if (event.status !== 'upcoming' && event.status !== 'ongoing') {
       toast({
@@ -133,30 +81,133 @@ export default function EventDetail() {
         .from('event_participants')
         .insert({
           user_id: user.id,
-          event_id: eventId,
+          event_id: event.id,
           team: assignedTeam,
         });
 
-      if (error) {
-        throw error;
-      }
+      if (error) throw error;
 
-      toast({
-        title: "Successfully joined event!",
-        description: `You've been assigned to Team ${assignedTeam}: ${assignedTeam === 'A' ? event.team_a_name : event.team_b_name}`,
-      });
-
+      // Update local state
       setUserParticipation(assignedTeam);
-      fetchParticipants();
+      
+      // Refresh participants list
+      await fetchParticipants();
 
-    } catch (error: any) {
       toast({
-        title: "Failed to join event",
-        description: error.message,
+        title: "Success!",
+        description: `You've been added to Team ${assignedTeam}: ${assignedTeam === 'A' ? event.team_a_name : event.team_b_name}`,
+      });
+    } catch (error) {
+      console.error('Error joining event:', error);
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : 'Failed to join event',
         variant: "destructive",
       });
     } finally {
       setJoining(false);
+    }
+  };
+
+  useEffect(() => {
+    if (eventId) {
+      fetchEvent();
+      fetchParticipants();
+    }
+  }, [eventId]);
+
+  const fetchEvent = async () => {
+    if (!eventId) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('events')
+        .select('*')
+        .eq('id', eventId)
+        .single();
+
+      if (error) throw error;
+      
+      if (data) {
+        setEvent(data);
+      } else {
+        toast({
+          title: "Event not found",
+          description: "The requested event could not be found.",
+          variant: "destructive",
+        });
+        navigate('/events');
+      }
+    } catch (error) {
+      console.error('Error fetching event:', error);
+      toast({
+        title: "Error fetching event",
+        description: error instanceof Error ? error.message : 'An unknown error occurred',
+        variant: "destructive",
+      });
+      navigate('/events');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchParticipants = async () => {
+    if (!eventId) return;
+
+    try {
+      // First, get all participants for the event
+      const { data: participantsData, error: participantsError } = await supabase
+        .from('event_participants')
+        .select('user_id, team')
+        .eq('event_id', eventId);
+
+      if (participantsError) throw participantsError;
+
+      if (!participantsData || participantsData.length === 0) {
+        setParticipants([]);
+        return;
+      }
+
+      // Get user IDs to fetch profile information
+      const userIds = participantsData.map(p => p.user_id);
+      
+      // Fetch user profiles in a separate query
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Create a map of user_id to profile
+      const profilesMap = new Map(profilesData?.map(profile => [profile.id, profile]) || []);
+
+      // Combine the data
+      const participantsWithProfiles = participantsData.map(participant => ({
+        user_id: participant.user_id,
+        team: participant.team,
+        profiles: profilesMap.get(participant.user_id) || null
+      }));
+
+      setParticipants(participantsWithProfiles as unknown as Participant[]);
+      
+      // Check if current user is already participating
+      if (user) {
+        const userParticipant = participantsData.find(p => p.user_id === user.id);
+        setUserParticipation(userParticipant?.team as 'A' | 'B' || null);
+      }
+    } catch (error) {
+      console.error('Error fetching participants:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to load participants',
+        variant: 'destructive',
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -306,18 +357,7 @@ export default function EventDetail() {
             </div>
           </div>
 
-          {/* Artwork Upload */}
-          {userParticipation && canUploadArtwork() && (
-            <div className="mt-6 pt-6 border-t">
-              <ArtworkUpload
-                eventId={event.id}
-                eventTitle={event.title}
-                currentTheme={getCurrentTheme()}
-                onArtworkUploaded={fetchParticipants}
-              />
-            </div>
-          )}
-
+          {/* Artwork Upload Message */}
           {userParticipation && !canUploadArtwork() && event.status === 'ongoing' && event.midway_time && (
             <div className="mt-6 pt-6 border-t">
               <Card className="border-accent/20 bg-accent/5">
@@ -335,43 +375,59 @@ export default function EventDetail() {
         </CardContent>
       </Card>
 
-      {/* Gallery Tabs */}
-      <Tabs defaultValue="all" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="all">All Artworks</TabsTrigger>
-          <TabsTrigger value="team-a">Team {event.team_a_name}</TabsTrigger>
-          <TabsTrigger value="team-b">Team {event.team_b_name}</TabsTrigger>
-        </TabsList>
+      {/* Upload Button and Tabs */}
+      <div className="space-y-4">
+        {user && (
+          <div className="flex justify-end">
+            <ArtworkUpload
+              eventId={event.id}
+              eventTitle={event.title}
+              currentTheme={event.midway_theme || event.theme}
+              onArtworkUploaded={() => {
+                // This will be handled by the EventGallery components
+                // They will automatically refresh when the artwork is uploaded
+              }}
+            />
+          </div>
+        )}
         
-        <TabsContent value="all">
-          <EventGallery
-            eventId={event.id}
-            eventTitle={event.title}
-            teamAName={event.team_a_name}
-            teamBName={event.team_b_name}
-          />
-        </TabsContent>
-        
-        <TabsContent value="team-a">
-          <EventGallery
-            eventId={event.id}
-            eventTitle={event.title}
-            teamAName={event.team_a_name}
-            teamBName={event.team_b_name}
-            teamFilter="A"
-          />
-        </TabsContent>
-        
-        <TabsContent value="team-b">
-          <EventGallery
-            eventId={event.id}
-            eventTitle={event.title}
-            teamAName={event.team_a_name}
-            teamBName={event.team_b_name}
-            teamFilter="B"
-          />
-        </TabsContent>
-      </Tabs>
+        <Tabs defaultValue="all" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="all">All Artworks</TabsTrigger>
+            <TabsTrigger value="team-a">Team {event.team_a_name}</TabsTrigger>
+            <TabsTrigger value="team-b">Team {event.team_b_name}</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="all">
+            <EventGallery
+              eventId={event.id}
+              eventTitle={event.title}
+              teamAName={event.team_a_name}
+              teamBName={event.team_b_name}
+            />
+          </TabsContent>
+          
+          <TabsContent value="team-a">
+            <EventGallery
+              eventId={event.id}
+              eventTitle={event.title}
+              teamAName={event.team_a_name}
+              teamBName={event.team_b_name}
+              teamFilter="A"
+            />
+          </TabsContent>
+          
+          <TabsContent value="team-b">
+            <EventGallery
+              eventId={event.id}
+              eventTitle={event.title}
+              teamAName={event.team_a_name}
+              teamBName={event.team_b_name}
+              teamFilter="B"
+            />
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }

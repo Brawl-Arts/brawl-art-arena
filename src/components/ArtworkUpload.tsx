@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Upload, Image as ImageIcon } from 'lucide-react';
+import { Upload } from 'lucide-react';
 import { toast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
@@ -29,6 +29,28 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      // Validate file type
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        toast({
+          title: "Invalid file type",
+          description: "Please upload a JPG, PNG, or WebP image",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Validate file size (5MB max)
+      const maxSize = 5 * 1024 * 1024; // 5MB
+      if (file.size > maxSize) {
+        toast({
+          title: "File too large",
+          description: "Please upload an image smaller than 5MB",
+          variant: "destructive",
+        });
+        return;
+      }
+
       setImageFile(file);
       const reader = new FileReader();
       reader.onload = () => {
@@ -39,7 +61,16 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
   };
 
   const uploadArtwork = async () => {
-    if (!user || !imageFile || !title.trim()) {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please sign in to upload artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!imageFile || !title.trim()) {
       toast({
         title: "Missing information",
         description: "Please fill in all required fields and select an image",
@@ -51,17 +82,35 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
     setUploading(true);
 
     try {
-      // Upload image to Supabase storage
-      const fileExt = imageFile.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2)}.${fileExt}`;
-      const filePath = `artworks/${fileName}`;
+      // Verify the user has a profile
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('user_id')
+        .eq('user_id', user.id)
+        .single();
 
+      if (profileError) {
+        console.error('Profile check error:', profileError);
+        throw new Error('Error verifying your account. Please try signing out and back in.');
+      }
+
+      // Create a unique file path
+      const fileExt = imageFile.name.split('.').pop()?.toLowerCase() || 'png';
+      const fileName = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${fileExt}`;
+      const filePath = `artworks/${user.id}/${fileName}`;
+
+      // Upload the file to storage
       const { error: uploadError } = await supabase.storage
         .from('artworks')
-        .upload(filePath, imageFile);
+        .upload(filePath, imageFile, {
+          cacheControl: '3600',
+          upsert: false,
+          contentType: imageFile.type
+        });
 
       if (uploadError) {
-        throw uploadError;
+        console.error('Upload error:', uploadError);
+        throw new Error(uploadError.message || 'Failed to upload image');
       }
 
       // Get public URL
@@ -69,7 +118,7 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
         .from('artworks')
         .getPublicUrl(filePath);
 
-      // Create artwork record
+      // Create artwork record in database
       const { error: insertError } = await supabase
         .from('artworks')
         .insert({
@@ -81,28 +130,28 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
         });
 
       if (insertError) {
-        throw insertError;
+        console.error('Insert error:', insertError);
+        // Clean up the uploaded file if the database insert fails
+        await supabase.storage.from('artworks').remove([filePath]);
+        throw new Error(insertError.message || 'Failed to save artwork details');
       }
 
-      // Update user points for artwork upload (+3 points)
-      const { error: pointsError } = await supabase
-        .from('user_points')
-        .upsert({
-          user_id: user.id,
-          event_id: eventId,
-          artwork_points: 3,
-          points_total: 3
-        }, {
-          onConflict: 'user_id,event_id'
+      // Update user points for artwork upload
+      try {
+        await supabase.rpc('increment_user_points', {
+          user_uuid: user.id,
+          event_uuid: eventId,
+          points_to_add: 3,
+          points_type: 'artwork_points'
         });
-
-      if (pointsError) {
-        console.error('Error updating points:', pointsError);
+      } catch (pointsError) {
+        console.warn('Points update warning:', pointsError);
+        // Don't fail the upload if points update fails
       }
 
       toast({
         title: "Artwork uploaded successfully!",
-        description: "You earned 3 points for uploading artwork",
+        description: "Your artwork has been submitted and is now visible in the gallery.",
       });
 
       // Reset form
@@ -114,9 +163,10 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
       onArtworkUploaded();
 
     } catch (error: any) {
+      console.error('Upload error:', error);
       toast({
         title: "Upload failed",
-        description: error.message,
+        description: error.message || 'An error occurred while uploading your artwork',
         variant: "destructive",
       });
     } finally {
@@ -149,6 +199,7 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
               onChange={(e) => setTitle(e.target.value)}
               placeholder="Enter artwork title"
               required
+              disabled={uploading}
             />
           </div>
 
@@ -160,6 +211,7 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
               onChange={(e) => setDescription(e.target.value)}
               placeholder="Describe your artwork (optional)"
               rows={3}
+              disabled={uploading}
             />
           </div>
 
@@ -171,7 +223,12 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
               accept="image/*"
               onChange={handleImageChange}
               required
+              disabled={uploading}
+              className="cursor-pointer"
             />
+            <p className="text-xs text-muted-foreground mt-1">
+              Accepted formats: JPG, PNG, WebP (max 5MB)
+            </p>
           </div>
 
           {imagePreview && (
@@ -184,7 +241,7 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
                   <img
                     src={imagePreview}
                     alt="Artwork preview"
-                    className="w-full h-full object-cover"
+                    className="w-full h-full object-contain"
                   />
                 </div>
               </CardContent>
@@ -197,7 +254,17 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
               disabled={uploading || !imageFile || !title.trim()}
               className="flex-1"
             >
-              {uploading ? 'Uploading...' : 'Submit Artwork (+3 points)'}
+              {uploading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Uploading...
+                </>
+              ) : (
+                'Submit Artwork'
+              )}
             </Button>
             <Button 
               variant="outline" 
@@ -211,4 +278,4 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
       </DialogContent>
     </Dialog>
   );
-}
+} 
