@@ -45,6 +45,7 @@ export default function EventDetail() {
   const [userParticipation, setUserParticipation] = useState<'A' | 'B' | null>(null);
   const [loading, setLoading] = useState(true);
   const [joining, setJoining] = useState(false);
+  const [teamPoints, setTeamPoints] = useState<{ teamA: number; teamB: number }>({ teamA: 0, teamB: 0 });
 
   const joinEvent = async () => {
     if (!user) {
@@ -113,8 +114,50 @@ export default function EventDetail() {
     if (eventId) {
       fetchEvent();
       fetchParticipants();
+      fetchTeamPoints();
     }
   }, [eventId]);
+
+  const fetchTeamPoints = async () => {
+    if (!eventId) return;
+
+    try {
+      // Get all user points for this event
+      const { data: userPoints, error: pointsError } = await supabase
+        .from('user_points')
+        .select('user_id, points_total')
+        .eq('event_id', eventId);
+
+      if (pointsError) throw pointsError;
+
+      // Get all participants to know which team they're on
+      const { data: participants, error: participantsError } = await supabase
+        .from('event_participants')
+        .select('user_id, team')
+        .eq('event_id', eventId);
+
+      if (participantsError) throw participantsError;
+
+      // Calculate team totals
+      let teamATotal = 0;
+      let teamBTotal = 0;
+
+      participants?.forEach(participant => {
+        const userPoint = userPoints?.find(p => p.user_id === participant.user_id);
+        const points = userPoint?.points_total || 0;
+        
+        if (participant.team === 'A') {
+          teamATotal += points;
+        } else {
+          teamBTotal += points;
+        }
+      });
+
+      setTeamPoints({ teamA: teamATotal, teamB: teamBTotal });
+    } catch (error) {
+      console.error('Error fetching team points:', error);
+    }
+  };
 
   const fetchEvent = async () => {
     if (!eventId) {
@@ -336,6 +379,10 @@ export default function EventDetail() {
                       <Users className="h-4 w-4" />
                       <span className="text-sm">{teamAParticipants.length} members</span>
                     </div>
+                    <div className="flex items-center justify-center gap-1 mt-1">
+                      <Trophy className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold">{teamPoints.teamA} points</span>
+                    </div>
                     {userParticipation === 'A' && (
                       <Badge variant="default" className="mt-2">Your Team</Badge>
                     )}
@@ -347,6 +394,10 @@ export default function EventDetail() {
                     <div className="flex items-center justify-center gap-1 mt-2">
                       <Users className="h-4 w-4" />
                       <span className="text-sm">{teamBParticipants.length} members</span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1 mt-1">
+                      <Trophy className="h-4 w-4 text-accent" />
+                      <span className="text-sm font-semibold">{teamPoints.teamB} points</span>
                     </div>
                     {userParticipation === 'B' && (
                       <Badge variant="secondary" className="mt-2">Your Team</Badge>
@@ -384,8 +435,7 @@ export default function EventDetail() {
               eventTitle={event.title}
               currentTheme={event.midway_theme || event.theme}
               onArtworkUploaded={() => {
-                // This will be handled by the EventGallery components
-                // They will automatically refresh when the artwork is uploaded
+                fetchTeamPoints();
               }}
             />
           </div>

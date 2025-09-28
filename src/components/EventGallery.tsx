@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Heart, User, Trophy, Upload, Sword, MessageCircle } from 'lucide-react';
 import ArtworkUpload from './ArtworkUpload';
-import AttackDialog from './AttackDialog';
+import AttackArtworkDialog from './AttackArtworkDialog';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -32,6 +32,19 @@ interface Interaction {
   interaction_type: 'like' | 'attack';
 }
 
+interface FightArtwork {
+  id: string;
+  title: string;
+  image_url: string;
+  target_artwork_id: string;
+  attacker_id: string;
+  created_at: string;
+  profiles: {
+    username: string;
+    display_name: string;
+  } | null;
+}
+
 interface TeamScore {
   team: 'A' | 'B';
   totalPoints: number;
@@ -51,6 +64,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
   const [artworks, setArtworks] = useState<Artwork[]>([]);
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [teamScores, setTeamScores] = useState<TeamScore[]>([]);
+  const [fightArtworks, setFightArtworks] = useState<FightArtwork[]>([]);
   const [loading, setLoading] = useState(true);
   const [attackDialog, setAttackDialog] = useState<{
     isOpen: boolean;
@@ -64,6 +78,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
 
   useEffect(() => {
     fetchArtworks();
+    fetchFightArtworks();
     if (user) {
       fetchInteractions();
     }
@@ -195,6 +210,43 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
     });
 
     setTeamScores([teamA, teamB]);
+  };
+
+  const fetchFightArtworks = async () => {
+    try {
+      // First get fight artworks
+      const { data: fightData, error } = await supabase
+        .from('fight_artworks')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      if (!fightData || fightData.length === 0) {
+        setFightArtworks([]);
+        return;
+      }
+
+      // Get attacker profiles
+      const attackerIds = fightData.map(f => f.attacker_id);
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, username, display_name')
+        .in('id', attackerIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine data
+      const profilesMap = new Map(profilesData?.map(p => [p.id, p]) || []);
+      const fightsWithProfiles = fightData.map(fight => ({
+        ...fight,
+        profiles: profilesMap.get(fight.attacker_id) || null
+      }));
+
+      setFightArtworks(fightsWithProfiles as FightArtwork[]);
+    } catch (error) {
+      console.error('Error fetching fight artworks:', error);
+    }
   };
 
   const handleUploadSuccess = async (newArtwork: Artwork) => {
@@ -409,8 +461,8 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
         }
 
         toast({
-          title: "Liked!",
-          description: "You liked this artwork (+1 point to artist)",
+          title: "🎉 Congratulations!",
+          description: "You liked this artwork and the artist earned 1 point!",
         });
       }
 
@@ -491,6 +543,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
     fetchArtworks();
     fetchInteractions();
     fetchTeamScores();
+    fetchFightArtworks();
   };
 
   const hasInteracted = (artworkId: string, type: 'like' | 'attack') => {
@@ -630,11 +683,11 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
       </div>
 
       {/* Attack Dialog */}
-      <AttackDialog
+      <AttackArtworkDialog
         isOpen={attackDialog.isOpen}
         onClose={() => setAttackDialog({ isOpen: false, artworkId: '', artworkTitle: '' })}
-        artworkId={attackDialog.artworkId}
-        artworkTitle={attackDialog.artworkTitle}
+        targetArtworkId={attackDialog.artworkId}
+        targetArtworkTitle={attackDialog.artworkTitle}
         eventId={eventId}
         onAttackSuccess={handleAttackSuccess}
       />

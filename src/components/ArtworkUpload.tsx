@@ -149,8 +149,8 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
       }
 
       toast({
-        title: "Artwork uploaded successfully!",
-        description: "Your artwork has been submitted and is now visible in the gallery.",
+        title: "🎉 Congratulations!",
+        description: "Your artwork has been uploaded successfully and you earned 5 points!",
       });
 
       // Reset form
