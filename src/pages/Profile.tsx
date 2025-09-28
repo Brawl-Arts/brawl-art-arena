@@ -132,22 +132,38 @@ export default function Profile() {
       .from('event_participants')
       .select(`
         team,
-        events:event_id (id, title),
-        user_points!inner (points_total)
+        event_id,
+        events:event_id (id, title)
       `)
       .eq('user_id', user.id);
 
     if (error) {
       console.error('Error fetching events:', error);
-    } else if (data) {
-      const eventsList = data.map(item => ({
-        id: item.events?.id || '',
-        title: item.events?.title || '',
-        team: item.team as 'A' | 'B',
-        points: 0, // Will be fetched separately if needed
-      }));
-      setEvents(eventsList);
+      return;
     }
+
+    if (!data) return;
+
+    // Fetch points for each event
+    const eventsWithPoints = await Promise.all(
+      data.map(async (participant) => {
+        const { data: pointsData } = await supabase
+          .from('user_points')
+          .select('points_total')
+          .eq('user_id', user.id)
+          .eq('event_id', participant.event_id)
+          .single();
+
+        return {
+          id: participant.events?.id || '',
+          title: participant.events?.title || '',
+          team: participant.team as 'A' | 'B',
+          points: pointsData?.points_total || 0,
+        };
+      })
+    );
+
+    setEvents(eventsWithPoints);
   };
 
   if (loading) {

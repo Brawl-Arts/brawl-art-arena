@@ -136,12 +136,12 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
         throw new Error(insertError.message || 'Failed to save artwork details');
       }
 
-      // Update user points for artwork upload
+      // Update user points for artwork upload (5 points)
       try {
         await supabase.rpc('update_user_points', {
           p_user_id: user.id,
           p_event_id: eventId,
-          p_artwork_points: 3
+          p_artwork_points: 5
         });
       } catch (pointsError) {
         console.warn('Points update warning:', pointsError);

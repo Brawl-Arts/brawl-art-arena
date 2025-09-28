@@ -3,8 +3,9 @@ import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Heart, User, Trophy, Upload } from 'lucide-react';
+import { Heart, User, Trophy, Upload, Sword, MessageCircle } from 'lucide-react';
 import ArtworkUpload from './ArtworkUpload';
+import AttackDialog from './AttackDialog';
 import { toast } from '@/hooks/use-toast';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -51,6 +52,15 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
   const [interactions, setInteractions] = useState<Interaction[]>([]);
   const [teamScores, setTeamScores] = useState<TeamScore[]>([]);
   const [loading, setLoading] = useState(true);
+  const [attackDialog, setAttackDialog] = useState<{
+    isOpen: boolean;
+    artworkId: string;
+    artworkTitle: string;
+  }>({
+    isOpen: false,
+    artworkId: '',
+    artworkTitle: '',
+  });
 
   useEffect(() => {
     fetchArtworks();
@@ -256,6 +266,40 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
       return;
     }
 
+    const artwork = artworks.find(a => a.id === artworkId);
+    if (!artwork) return;
+
+    // Prevent user from liking their own artwork
+    if (artwork.user_id === user.id) {
+      toast({
+        title: "Not allowed",
+        description: "You cannot like your own artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user's team
+    const { data: userParticipant } = await supabase
+      .from('event_participants')
+      .select('team')
+      .eq('user_id', user.id)
+      .eq('event_id', eventId)
+      .single();
+
+    // Get artwork owner's team
+    const artworkTeam = artwork.event_participants?.[0]?.team;
+
+    // Prevent user from liking artwork from their own team
+    if (userParticipant?.team && artworkTeam && userParticipant.team === artworkTeam) {
+      toast({
+        title: "Not allowed",
+        description: "You cannot like artwork from your own team",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
       // Check if already liked
       const existingLike = interactions.find(
@@ -382,6 +426,73 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
     }
   };
 
+  const handleAttackClick = async (artworkId: string, artworkTitle: string) => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please sign in to attack artworks",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const artwork = artworks.find(a => a.id === artworkId);
+    if (!artwork) return;
+
+    // Prevent user from attacking their own artwork
+    if (artwork.user_id === user.id) {
+      toast({
+        title: "Not allowed",
+        description: "You cannot attack your own artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Get user's team
+    const { data: userParticipant } = await supabase
+      .from('event_participants')
+      .select('team')
+      .eq('user_id', user.id)
+      .eq('event_id', eventId)
+      .single();
+
+    // Get artwork owner's team
+    const artworkTeam = artwork.event_participants?.[0]?.team;
+
+    // Prevent user from attacking artwork from their own team
+    if (userParticipant?.team && artworkTeam && userParticipant.team === artworkTeam) {
+      toast({
+        title: "Not allowed",
+        description: "You cannot attack artwork from your own team",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if already attacked
+    if (hasInteracted(artworkId, 'attack')) {
+      toast({
+        title: "Already attacked",
+        description: "You have already attacked this artwork",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setAttackDialog({
+      isOpen: true,
+      artworkId,
+      artworkTitle,
+    });
+  };
+
+  const handleAttackSuccess = () => {
+    fetchArtworks();
+    fetchInteractions();
+    fetchTeamScores();
+  };
+
   const hasInteracted = (artworkId: string, type: 'like' | 'attack') => {
     return interactions.some(i => i.artwork_id === artworkId && i.interaction_type === type);
   };
@@ -478,6 +589,7 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
                       size="sm"
                       onClick={() => handleLikeToggle(artwork.id)}
                       className="flex items-center gap-1 hover:text-red-500"
+                      disabled={artwork.user_id === user?.id || hasInteracted(artwork.id, 'like')}
                     >
                       <Heart 
                         className={`h-4 w-4 ${hasInteracted(artwork.id, 'like') ? 'fill-red-500 text-red-500' : ''}`} 
@@ -485,17 +597,47 @@ export default function EventGallery({ eventId, eventTitle, teamAName, teamBName
                       <span>{artwork.likes_count}</span>
                     </Button>
 
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleAttackClick(artwork.id, artwork.title)}
+                      className="flex items-center gap-1 hover:text-destructive"
+                      disabled={artwork.user_id === user?.id || hasInteracted(artwork.id, 'attack')}
+                    >
+                      <Sword className="h-4 w-4" />
+                      <span>{artwork.attacks_count}</span>
+                    </Button>
                   </div>
 
                   <div className="text-xs text-muted-foreground">
                     {new Date(artwork.created_at).toLocaleDateString()}
                   </div>
                 </div>
+
+                {/* Attack Thread */}
+                {artwork.attacks_count > 0 && (
+                  <div className="mt-3 pt-3 border-t">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <MessageCircle className="h-4 w-4" />
+                      <span>Under attack • {artwork.attacks_count} battle{artwork.attacks_count > 1 ? 's' : ''}</span>
+                    </div>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
+
+      {/* Attack Dialog */}
+      <AttackDialog
+        isOpen={attackDialog.isOpen}
+        onClose={() => setAttackDialog({ isOpen: false, artworkId: '', artworkTitle: '' })}
+        artworkId={attackDialog.artworkId}
+        artworkTitle={attackDialog.artworkTitle}
+        eventId={eventId}
+        onAttackSuccess={handleAttackSuccess}
+      />
 
       {artworks.length === 0 && (
         <div className="text-center py-12">
