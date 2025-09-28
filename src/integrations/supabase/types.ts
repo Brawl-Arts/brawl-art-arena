@@ -44,6 +44,13 @@ export type Database = {
             referencedRelation: "artworks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "artwork_interactions_artwork_id_fkey"
+            columns: ["artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks_view"
+            referencedColumns: ["id"]
+          },
         ]
       }
       artworks: {
@@ -90,6 +97,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "artworks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
           },
         ]
       }
@@ -212,6 +226,13 @@ export type Database = {
             referencedRelation: "artworks"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "fight_artworks_target_artwork_id_fkey"
+            columns: ["target_artwork_id"]
+            isOneToOne: false
+            referencedRelation: "artworks_view"
+            referencedColumns: ["id"]
+          },
         ]
       }
       profiles: {
@@ -290,7 +311,40 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      artworks_view: {
+        Row: {
+          attacks_count: number | null
+          created_at: string | null
+          description: string | null
+          display_name: string | null
+          event_id: string | null
+          event_title: string | null
+          id: string | null
+          image_url: string | null
+          likes_count: number | null
+          participant_team: string | null
+          title: string | null
+          updated_at: string | null
+          user_id: string | null
+          username: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "artworks_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "artworks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["user_id"]
+          },
+        ]
+      }
     }
     Functions: {
       update_event_status: {
