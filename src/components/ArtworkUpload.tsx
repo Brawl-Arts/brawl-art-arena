@@ -138,11 +138,10 @@ export default function ArtworkUpload({ eventId, eventTitle, currentTheme, onArt
 
       // Update user points for artwork upload
       try {
-        await supabase.rpc('increment_user_points', {
-          user_uuid: user.id,
-          event_uuid: eventId,
-          points_to_add: 3,
-          points_type: 'artwork_points'
+        await supabase.rpc('update_user_points', {
+          p_user_id: user.id,
+          p_event_id: eventId,
+          p_artwork_points: 3
         });
       } catch (pointsError) {
         console.warn('Points update warning:', pointsError);
